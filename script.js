@@ -70,16 +70,18 @@ async function initWebGPU() {
 
             let index = y * ${gpu.gridSize}u + x;
 
-            if (x > 0u && y > 0u) {
-                output[index] =
-                    input[index - 1u] * 0.25 +
-                    input[index - ${gpu.gridSize}u] * 0.25 +
-                    input[index + 1u] * 0.25 +
-                    input[index + ${gpu.gridSize}u] * 0.25;
+            // Proper advection equation would go here
+            let center = input[index];
+            let left = input[y * ${gpu.gridSize}u + max(x - 1u, 0u)];
+            let right = input[y * ${gpu.gridSize}u + min(x + 1u, ${gpu.gridSize}u - 1u)];
+            let up = input[max(y - 1u, 0u) * ${gpu.gridSize}u + x];
+            let down = input[min(y + 1u, ${gpu.gridSize}u - 1u) * ${gpu.gridSize}u + x];
 
-            } else {
-                output[index] = input[index];
-            }
+            let laplacian = left + right + up + down - 4.0 * center;
+
+            // Simple diffusion step
+            let diffusionRate = 0.1;
+            output[index] = center + diffusionRate * laplacian * ${timestep};
         }
     `;
 
