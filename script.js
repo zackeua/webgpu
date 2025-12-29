@@ -72,16 +72,23 @@ async function initWebGPU() {
 
             // Proper advection equation would go here
             let center = input[index];
-            let left = input[y * ${gpu.gridSize}u + max(x - 1u, 0u)];
-            let right = input[y * ${gpu.gridSize}u + min(x + 1u, ${gpu.gridSize}u - 1u)];
-            let up = input[max(y - 1u, 0u) * ${gpu.gridSize}u + x];
-            let down = input[min(y + 1u, ${gpu.gridSize}u - 1u) * ${gpu.gridSize}u + x];
+            let x_gradient = input[index + max(x - 1u, 0u)] - input[index + min(x + 1u, ${gpu.gridSize}u - 1u)];
+            let y_gradient = input[index + max(y - 1u, 0u) * ${gpu.gridSize}u] - input[index + min(y + 1u, ${gpu.gridSize}u - 1u) * ${gpu.gridSize}u];
 
-            let laplacian = left + right + up + down - 4.0 * center;
+            let gradient = (x_gradient + y_gradient) * 0.5;
 
-            // Simple diffusion step
-            let diffusionRate = 0.1;
-            output[index] = center + diffusionRate * laplacian * ${timestep};
+            let x_laplacian = input[y * ${gpu.gridSize}u + max(x - 1u, 0u)] + input[y * ${gpu.gridSize}u + min(x + 1u, ${gpu.gridSize}u - 1u)] - 2.0 * center;
+            let y_laplacian = input[max(y - 1u, 0u) * ${gpu.gridSize}u + x] + input[min(y + 1u, ${gpu.gridSize}u - 1u) * ${gpu.gridSize}u + x] - 2.0 * center;
+            let xy_laplacian = input[max(y - 1u, 0u) * ${gpu.gridSize}u + max(x - 1u, 0u)] + input[min(y + 1u, ${gpu.gridSize}u - 1u) * ${gpu.gridSize}u + min(x + 1u, ${gpu.gridSize}u - 1u)]
+                                - input[max(y - 1u, 0u) * ${gpu.gridSize}u + min(x + 1u, ${gpu.gridSize}u - 1u)]
+                                - input[min(y + 1u, ${gpu.gridSize}u - 1u) * ${gpu.gridSize}u + max(x - 1u, 0u)];
+            let yx_laplacian = input[min(y + 1u, ${gpu.gridSize}u - 1u) * ${gpu.gridSize}u + max(x - 1u, 0u)] + input[max(y - 1u, 0u) * ${gpu.gridSize}u + min(x + 1u, ${gpu.gridSize}u - 1u)]
+                                - input[max(y - 1u, 0u) * ${gpu.gridSize}u + max(x - 1u, 0u)]
+                                - input[min(y + 1u, ${gpu.gridSize}u - 1u) * ${gpu.gridSize}u + min(x + 1u, ${gpu.gridSize}u - 1u)];
+
+            let laplacian = 0.25 * (x_laplacian + y_laplacian + xy_laplacian + yx_laplacian);
+
+            output[index] = center - gradient * ${timestep} + laplacian * ${timestep}*${timestep};
         }
     `;
 
