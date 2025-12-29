@@ -4,7 +4,8 @@ async function initWebGPU() {
         console.error("WebGPU is not supported on this browser.");
         return;
     }
-    
+
+    // Use webGPU to simulate the advection equation on a 2D grid
     const adapter = await navigator.gpu.requestAdapter();
     const device = await adapter.requestDevice();
     
@@ -15,67 +16,71 @@ async function initWebGPU() {
     context.configure({
         device: device,
         format: format,
-        alphaMode: "opaque"
+        alphaMode: "opaque",
+    });
+    const gridSize = 256;
+    const bufferSize = gridSize * gridSize * 4; // 4 bytes per float
+    
+    // Create buffers for the simulation
+    const inputBuffer = device.createBuffer({
+        size: bufferSize,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
     
-    const shaderModule = device.createShaderModule({
-        code: `
-        @vertex
-        fn vs_main(@builtin(vertex_index) VertexIndex : u32) -> @builtin(position) vec4<f32> {
-            var pos = array<vec2<f32>, 3>(
-                vec2<f32>(0.0, 0.5),
-                vec2<f32>(-0.5, -0.5),
-                vec2<f32>(0.5, -0.5)
-            );
-            return vec4<f32>(pos[VertexIndex], 0.0, 1.0);
-        }
+    const outputBuffer = device.createBuffer({
+        size: bufferSize,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+    });
+    
+    // Create a compute shader for the advection equation
+    const shaderCode = `
+        @group(0) @binding(0) var<storage, read> input : array<f32>;
+        @group(0) @binding(1) var<storage, read_write> output : array<f32>;
+        
+        @compute @workgroup_size(16, 16)
+        fn main(@builtin(global_invocation_id) GlobalInvocationID : vec3<u32>) {
+            let x = GlobalInvocationID.x;
+            let y = GlobalInvocationID.y;
+            let index = y * ${gridSize}u + x;
             
-        @fragment
-        fn fs_main() -> @location(0) vec4<f32> {
-            return vec4<f32>(1.0, 0.0, 0.0, 1.0);  // Red color
+            // Simple advection logic (placeholder)
+            if (x > 0u && y > 0u) {
+                output[index] = input[index - 1u] * 0.99 + input[index - ${gridSize}u] * 0.01;
+            } else {
+                output[index] = input[index];
+            }
         }
-        `
+    `;
+    
+    const shaderModule = device.createShaderModule({ code: shaderCode });
+    
+    const computePipeline = device.createComputePipeline({
+        layout: "auto",
+        compute: {
+            module: shaderModule,
+            entryPoint: "main",
+        },
     });
     
-    const pipeline = device.createRenderPipeline({
-        vertex: {
-            module: shaderModule,
-            entryPoint: "vs_main"
-        },
-        fragment: {
-            module: shaderModule,
-            entryPoint: "fs_main",
-            targets: [{ format: format }]
-        },
-        primitive: {
-            topology: "triangle-list"
-        },
-        layout: "auto"
+    const bindGroupLayout = computePipeline.getBindGroupLayout(0);
+    const bindGroup = device.createBindGroup({
+        layout: bindGroupLayout,
+        entries: [
+            { binding: 0, resource: { buffer: inputBuffer } },
+            { binding: 1, resource: { buffer: outputBuffer } },
+        ],
     });
     
-    function frame() {
-        const commandEncoder = device.createCommandEncoder();
-        const textureView = context.getCurrentTexture().createView();
-        
-        const renderPassDescriptor = {
-            colorAttachments: [{
-                view: textureView,
-                clearValue: { r: 0, g: 0, b: 0, a: 1 },
-                loadOp: 'clear',
-                storeOp: 'store'
-            }]
-        };
-        
-        const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-        passEncoder.setPipeline(pipeline);
-        passEncoder.draw(3, 1, 0, 0);
-        passEncoder.end();
-        
-        device.queue.submit([commandEncoder.finish()]);
-        requestAnimationFrame(frame);
-    }
+    // Command encoder and compute pass
+    const commandEncoder = device.createCommandEncoder();
+    const passEncoder = commandEncoder.beginComputePass();
+    passEncoder.setPipeline(computePipeline);
+    passEncoder.setBindGroup(0, bindGroup);
+    passEncoder.dispatchWorkgroups(gridSize / 16, gridSize / 16);
+    passEncoder.end();
     
-    requestAnimationFrame(frame);
-}
-
+    device.queue.submit([commandEncoder.finish()]);
+    
+    console.log("Advection simulation step executed.");
+}  
 window.onload = initWebGPU;
