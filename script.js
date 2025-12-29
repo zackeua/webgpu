@@ -6,7 +6,7 @@ let gpu = {
     pipeline: null,
     bindGroups: [],
     buffers: [],
-    gridSize: 800,
+    gridSize: 1600,
     workgroupSize: 16,
     currentBuffer: 0,
 
@@ -137,12 +137,17 @@ async function initWebGPU() {
         var<storage, read> field : array<f32>;
 
         @fragment
-        fn fs_main(in : VSOut) -> @location(0) vec4<f32> {
-            let x = u32(in.uv.x * ${gpu.gridSize}.0);
-            let y = u32(in.uv.y * ${gpu.gridSize}.0);
-            let idx = y * ${gpu.gridSize}u + x;
+        fn fs_main(@builtin(position) fragCoord : vec4<f32>) -> @location(0) vec4<f32> {
+            let px = u32(fragCoord.x);
+            let py = u32(fragCoord.y);
 
+            // Map canvas pixels → grid coordinates
+            let gx = max(min(px * ${gpu.gridSize}u / u32(${800}), ${gpu.gridSize}u - 1u), 0u);
+            let gy = max(min(py * ${gpu.gridSize}u / u32(${800}), ${gpu.gridSize}u - 1u), 0u);
+
+            let idx = gy * ${gpu.gridSize}u + gx;
             let v = clamp(field[idx], 0.0, 1.0);
+
             return vec4(v, v, v, 1.0);
         }
     `;
