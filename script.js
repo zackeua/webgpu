@@ -18,6 +18,7 @@ let gpu = {
 };
 
 let running = false;
+let lastFrameTime = 0;
 let timestep = 0.0001;
 let diffusion = 0.0002;
 let velocityX = 0.2;
@@ -438,11 +439,17 @@ function renderSimulation() {
 
 /* ===================== LOOP ===================== */
 
-function simLoop() {
+function simLoop(timestamp) {
     if (!running) return;
 
-    stepSimulation();
-    renderSimulation();
+    const elapsed = timestamp - lastFrameTime;
+    const minFrameTime = gpu.simulation === "Advection equation" ? 16 : 120;
+
+    if (elapsed >= minFrameTime) {
+        lastFrameTime = timestamp;
+        stepSimulation();
+        renderSimulation();
+    }
 
     requestAnimationFrame(simLoop);
 }
