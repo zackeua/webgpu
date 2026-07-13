@@ -6,6 +6,7 @@ let gpu = {
     pipeline: null,
     bindGroups: [],
     buffers: [],
+    uniformBuffer: null,
     gridSize: 2**11, // 2048
     workgroupSize: 16,
     currentBuffer: 0,
@@ -56,11 +57,23 @@ async function initWebGPU() {
         }),
     ];
 
+    gpu.uniformBuffer = gpu.device.createBuffer({
+        size: 16,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
+    const updateComputeParams = () => {
+        const params = new Float32Array([timestep, diffusion, velocityX, velocityY]);
+        gpu.device.queue.writeBuffer(gpu.uniformBuffer, 0, params);
+    };
+    updateComputeParams();
+
     /* ---------- COMPUTE PIPELINE ---------- */
 
     const advectionComputeShader = `
         @group(0) @binding(0) var<storage, read> input : array<f32>;
         @group(0) @binding(1) var<storage, read_write> output : array<f32>;
+        @group(0) @binding(2) var<uniform> params : vec4<f32>;
 
         @compute @workgroup_size(${gpu.workgroupSize}, ${gpu.workgroupSize})
         fn main(@builtin(global_invocation_id) id : vec3<u32>) {
@@ -94,23 +107,17 @@ async function initWebGPU() {
                 down = input[index + ${gpu.gridSize}u];
             }
 
-            let dx = 1.0 / f32(${gpu.gridSize}u);
-            let invDx2 = 1.0 / (dx * dx);
+            let gridSizeF = f32(${gpu.gridSize}u);
+            let invDx = gridSizeF;
+            let invDx2 = gridSizeF * gridSizeF;
 
-            let vx = ${velocityX};
-            let vy = ${velocityY};
-            let nu = ${diffusion};
-            let dt = ${timestep};
+            let dt = params.x;
+            let nu = params.y;
+            let vx = params.z;
+            let vy = params.w;
 
-            var u_x = (center - left) * dx;
-            if (vx < 0.0) {
-                u_x = (right - center) * dx;
-            }
-
-            var u_y = (center - up) * dx;
-            if (vy < 0.0) {
-                u_y = (down - center) * dx;
-            }
+            let u_x = 0.5 * (right - left) * invDx;
+            let u_y = 0.5 * (down - up) * invDx;
 
             let u_xx = (right - 2.0 * center + left) * invDx2;
             let u_yy = (down - 2.0 * center + up) * invDx2;
@@ -176,6 +183,7 @@ async function initWebGPU() {
             entries: [
                 { binding: 0, resource: { buffer: gpu.buffers[0] } },
                 { binding: 1, resource: { buffer: gpu.buffers[1] } },
+                { binding: 2, resource: { buffer: gpu.uniformBuffer } },
             ],
         }),
         gpu.device.createBindGroup({
@@ -183,6 +191,7 @@ async function initWebGPU() {
             entries: [
                 { binding: 0, resource: { buffer: gpu.buffers[1] } },
                 { binding: 1, resource: { buffer: gpu.buffers[0] } },
+                { binding: 2, resource: { buffer: gpu.uniformBuffer } },
             ],
         }),
     ];
@@ -374,7 +383,23 @@ function simLoop() {
 /* ===================== UI ===================== */
 
 window.addEventListener("DOMContentLoaded", () => {
+    const timestepInput = document.getElementById("timestep-size");
+
+    const updateParams = () => {
+        const value = parseFloat(timestepInput.value);
+        if (!isNaN(value) && value > 0) {
+            timestep = value;
+            if (gpu.device && gpu.uniformBuffer) {
+                const params = new Float32Array([timestep, diffusion, velocityX, velocityY]);
+                gpu.device.queue.writeBuffer(gpu.uniformBuffer, 0, params);
+            }
+        }
+    };
+
+    timestepInput.addEventListener("input", updateParams);
+
     document.getElementById("render-button").addEventListener("click", async () => {
+        updateParams();
 
         const simulation = document.getElementById("simulation-select").value;
         setSimulation(simulation);
