@@ -18,7 +18,7 @@
             <div class="tabs" role="tablist">
                 <button class="tab active" data-simulation="Advection equation">Advection</button>
                 <button class="tab" data-simulation="Game of Life">Game of Life</button>
-                <button class="tab" data-simulation="Simulation Option 3">Option 3</button>
+                <button class="tab" data-simulation="Ising model">Ising model</button>
             </div>
 
             <div id="config-panel">
@@ -54,13 +54,18 @@
                     </div>
                 </div>
 
-                <div class="config" id="config-option3">
+                <div class="config" id="config-ising">
                     <div class="field">
-                        <label for="option3-timestep">Timestep</label>
-                        <input type="number" id="option3-timestep" value="0.01" step="0.01" min="0">
+                        <label for="ising-timestep">Timestep</label>
+                        <input type="number" id="ising-timestep" value="0.01" step="0.005" min="0">
                     </div>
-                    <div class="field note">
-                        <p>Option 3 is a placeholder mode. Customize this panel for your next simulation.</p>
+                    <div class="field">
+                        <label for="ising-temperature">Temperature</label>
+                        <input type="number" id="ising-temperature" value="2.5" step="0.1" min="0.1">
+                    </div>
+                    <div class="field">
+                        <label for="ising-field">External field</label>
+                        <input type="number" id="ising-field" value="0.0" step="0.05">
                     </div>
                 </div>
             </div>

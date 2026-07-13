@@ -23,6 +23,8 @@ let diffusion = 0.0002;
 let velocityX = 0.2;
 let velocityY = 0.05;
 let golDensity = 0.5;
+let isingTemperature = 2.5;
+let isingField = 0.0;
 
 /* ===================== INIT ===================== */
 
@@ -65,7 +67,12 @@ async function initWebGPU() {
     });
 
     const updateComputeParams = () => {
-        const params = new Float32Array([timestep, diffusion, velocityX, velocityY]);
+        const params = new Float32Array([
+            timestep,
+            gpu.simulation === "Advection equation" ? diffusion : gpu.simulation === "Icing model" ? icingDeposition : 0.0,
+            gpu.simulation === "Advection equation" ? velocityX : gpu.simulation === "Icing model" ? icingMelt : 0.0,
+            gpu.simulation === "Advection equation" ? velocityY : 0.0,
+        ]);
         gpu.device.queue.writeBuffer(gpu.uniformBuffer, 0, params);
     };
     updateComputeParams();
@@ -166,9 +173,58 @@ async function initWebGPU() {
             }
         `;
 
+        const isingComputeShader = `
+            @group(0) @binding(0) var<storage, read> input : array<f32>;
+            @group(0) @binding(1) var<storage, read_write> output : array<f32>;
+            @group(0) @binding(2) var<uniform> params : vec4<f32>;
+
+            fn rand(x : f32) -> f32 {
+                return fract(sin(x) * 43758.5453123);
+            }
+
+            @compute @workgroup_size(${gpu.workgroupSize}, ${gpu.workgroupSize})
+            fn main(@builtin(global_invocation_id) id : vec3<u32>) {
+                let x = id.x;
+                let y = id.y;
+                if (x >= ${gpu.gridSize}u || y >= ${gpu.gridSize}u) {
+                    return;
+                }
+                let index = y * ${gpu.gridSize}u + x;
+                let center = input[index];
+
+                var left = center;
+                if (x > 0u) {
+                    left = input[index - 1u];
+                }
+                var right = center;
+                if (x < ${gpu.gridSize}u - 1u) {
+                    right = input[index + 1u];
+                }
+                var up = center;
+                if (y > 0u) {
+                    up = input[index - ${gpu.gridSize}u];
+                }
+                var down = center;
+                if (y < ${gpu.gridSize}u - 1u) {
+                    down = input[index + ${gpu.gridSize}u];
+                }
+
+                let temperature = max(params.y, 0.01);
+                let field = params.z;
+                let seed = f32(index) * 12.9898 + params.x * 78.233 + f32(y) * 5.17;
+                let r = rand(seed);
+
+                let neighborSum = left + right + up + down;
+                let deltaE = 2.0 * center * (neighborSum + field);
+                let accept = deltaE <= 0.0 || exp(-deltaE / temperature) > r;
+
+                output[index] = select(center, -center, accept);
+            }
+        `;
+
         const computeShader = gpu.simulation === "Advection equation" ? advectionComputeShader :
                               gpu.simulation === "Game of Life" ? gameComputeShader :
-                              advectionComputeShader;
+                              isingComputeShader;
 
         gpu.pipeline = gpu.device.createComputePipeline({
             layout: "auto",
@@ -199,133 +255,6 @@ async function initWebGPU() {
     };
 
     createComputePipeline();
-    /* ---------- COMPUTE PIPELINE ---------- */
-
-    const advectionComputeShader = `
-        @group(0) @binding(0) var<storage, read> input : array<f32>;
-        @group(0) @binding(1) var<storage, read_write> output : array<f32>;
-        @group(0) @binding(2) var<uniform> params : vec4<f32>;
-
-        @compute @workgroup_size(${gpu.workgroupSize}, ${gpu.workgroupSize})
-        fn main(@builtin(global_invocation_id) id : vec3<u32>) {
-            let x = id.x;
-            let y = id.y;
-
-            if (x >= ${gpu.gridSize}u || y >= ${gpu.gridSize}u) {
-                return;
-            }
-
-            let index = y * ${gpu.gridSize}u + x;
-            let center = input[index];
-
-            var left = center;
-            if (x > 0u) {
-                left = input[index - 1u];
-            }
-
-            var right = center;
-            if (x < ${gpu.gridSize}u - 1u) {
-                right = input[index + 1u];
-            }
-
-            var up = center;
-            if (y > 0u) {
-                up = input[index - ${gpu.gridSize}u];
-            }
-
-            var down = center;
-            if (y < ${gpu.gridSize}u - 1u) {
-                down = input[index + ${gpu.gridSize}u];
-            }
-
-            let gridSizeF = f32(${gpu.gridSize}u);
-            let invDx = gridSizeF;
-            let invDx2 = gridSizeF * gridSizeF;
-
-            let dt = params.x;
-            let nu = params.y;
-            let vx = params.z;
-            let vy = params.w;
-
-            let u_x = 0.5 * (right - left) * invDx;
-            let u_y = 0.5 * (down - up) * invDx;
-
-            let u_xx = (right - 2.0 * center + left) * invDx2;
-            let u_yy = (down - 2.0 * center + up) * invDx2;
-
-            let advective = -(vx * u_x + vy * u_y);
-            let diffusive = nu * (u_xx + u_yy);
-
-            output[index] = clamp(center + (advective + diffusive) * dt, 0.0, 1.0);
-        }
-    `;
-
-    const gameComputeShader = `
-        @group(0) @binding(0) var<storage, read> input : array<f32>;
-        @group(0) @binding(1) var<storage, read_write> output : array<f32>;
-        
-        @compute @workgroup_size(${gpu.workgroupSize}, ${gpu.workgroupSize})
-        fn main(@builtin(global_invocation_id) id : vec3<u32>) {
-            let x = id.x;
-            let y = id.y;
-            if (x >= ${gpu.gridSize}u || y >= ${gpu.gridSize}u) {
-                return;
-            }
-            let index = y * ${gpu.gridSize}u + x;
-
-            // Placeholder for game of life logic
-            var neighbors = 0u;
-            neighbors += u32(input[y * ${gpu.gridSize}u + max(x - 1u, 0u)]);
-            neighbors += u32(input[y * ${gpu.gridSize}u + min(x + 1u, ${gpu.gridSize}u - 1u)]);
-            neighbors += u32(input[max(y - 1u, 0u) * ${gpu.gridSize}u + x]);
-            neighbors += u32(input[min(y + 1u, ${gpu.gridSize}u - 1u) * ${gpu.gridSize}u + x]);
-            neighbors += u32(input[max(y - 1u, 0u) * ${gpu.gridSize}u + max(x - 1u, 0u)]);
-            neighbors += u32(input[max(y - 1u, 0u) * ${gpu.gridSize}u + min(x + 1u, ${gpu.gridSize}u - 1u)]);
-            neighbors += u32(input[min(y + 1u, ${gpu.gridSize}u - 1u) * ${gpu.gridSize}u + max(x - 1u, 0u)]);
-            neighbors += u32(input[min(y + 1u, ${gpu.gridSize}u - 1u) * ${gpu.gridSize}u + min(x + 1u, ${gpu.gridSize}u - 1u)]);
-
-            if (u32(input[index]) > 0u) {
-                if (neighbors < 2u || neighbors > 3u) {
-                    output[index] = 0.0; // Cell dies
-                } else {
-                    output[index] = 1.0; // Cell lives
-                }
-            }  else {
-                output[index] = input[index];
-            }
-        }
-    `;
-
-    const computeShader = gpu.simulation === "Advection equation" ? advectionComputeShader :
-                          gpu.simulation === "Game of Life" ? gameComputeShader :
-                          advectionComputeShader; // default
-
-    gpu.pipeline = gpu.device.createComputePipeline({
-        layout: "auto",
-        compute: {
-            module: gpu.device.createShaderModule({ code: computeShader }),
-            entryPoint: "main",
-        },
-    });
-
-    gpu.bindGroups = [
-        gpu.device.createBindGroup({
-            layout: gpu.pipeline.getBindGroupLayout(0),
-            entries: [
-                { binding: 0, resource: { buffer: gpu.buffers[0] } },
-                { binding: 1, resource: { buffer: gpu.buffers[1] } },
-                { binding: 2, resource: { buffer: gpu.uniformBuffer } },
-            ],
-        }),
-        gpu.device.createBindGroup({
-            layout: gpu.pipeline.getBindGroupLayout(0),
-            entries: [
-                { binding: 0, resource: { buffer: gpu.buffers[1] } },
-                { binding: 1, resource: { buffer: gpu.buffers[0] } },
-                { binding: 2, resource: { buffer: gpu.uniformBuffer } },
-            ],
-        }),
-    ];
 
     /* ---------- RENDER PIPELINE ---------- */
 
@@ -432,6 +361,13 @@ function initializeField() {
                 data[y * size + x] = Math.random() > 0.5 ? 1.0 : 0.0;
             }
         }
+    } else if (gpu.simulation === "Ising model") {
+        console.log("Initializing field for Ising model.");
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                data[y * size + x] = Math.random() > 0.5 ? 1.0 : -1.0;
+            }
+        }
     } else {
         console.log("Initializing field for default simulation.");
     }
@@ -448,8 +384,8 @@ function setSimulation(option) {
         gpu.simulation = "Advection equation";
     } else if (option === "Game of Life") {
         gpu.simulation = "Game of Life";
-    } else if (option === "Simulation Option 3") {
-        gpu.simulation = "Simulation Option 3";
+    } else if (option === "Ising model") {
+        gpu.simulation = "Ising model";
     } else {
         console.warn("Unknown simulation option:", option, "defaulting to Advection equation.");
         gpu.simulation = "Advection equation";
@@ -518,7 +454,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const configs = {
         "Advection equation": document.getElementById("config-advection"),
         "Game of Life": document.getElementById("config-gol"),
-        "Simulation Option 3": document.getElementById("config-option3"),
+        "Ising model": document.getElementById("config-ising"),
     };
 
     const setActiveSimulation = (simulation) => {
@@ -551,12 +487,19 @@ window.addEventListener("DOMContentLoaded", () => {
         } else if (gpu.simulation === "Game of Life") {
             timestep = parseFloat(document.getElementById("gol-timestep").value) || timestep;
             golDensity = parseFloat(document.getElementById("gol-density").value) || golDensity;
-        } else {
-            timestep = parseFloat(document.getElementById("option3-timestep").value) || timestep;
+        } else if (gpu.simulation === "Ising model") {
+            timestep = parseFloat(document.getElementById("ising-timestep").value) || timestep;
+            isingTemperature = parseFloat(document.getElementById("ising-temperature").value) || isingTemperature;
+            isingField = parseFloat(document.getElementById("ising-field").value) || isingField;
         }
 
         if (gpu.device && gpu.uniformBuffer) {
-            const params = new Float32Array([timestep, diffusion, velocityX, velocityY]);
+            const params = new Float32Array([
+                timestep,
+                gpu.simulation === "Advection equation" ? diffusion : gpu.simulation === "Ising model" ? isingTemperature : 0.0,
+                gpu.simulation === "Advection equation" ? velocityX : gpu.simulation === "Ising model" ? isingField : 0.0,
+                gpu.simulation === "Advection equation" ? velocityY : 0.0,
+            ]);
             gpu.device.queue.writeBuffer(gpu.uniformBuffer, 0, params);
         }
     };
