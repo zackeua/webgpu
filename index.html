@@ -8,24 +8,70 @@
     <script src="script.js" defer></script>
 </head>
 <body>
-    <h1>WebGPU Demo</h1>
-    <!-- Menu for choosing simulation options -->
-    <div id="menu">
-        <label for="simulation-select">Choose a simulation:</label>
-        <select id="simulation-select">
-            <option value="Advection equation">Advection equation</option>
-            <option value="Game of Life">Game of Life</option>
-            <option value="Simulation Option 3">Simulation Option 3</option>
-        </select>
-        <!-- Timestep size -->
-        <input type="number" id="timestep-size" value="0.01" step="0.01" min="0">
-        <label for="timestep-size">Timestep Size</label>
-        <br>
+    <div class="container">
+        <header>
+            <h1>WebGPU Demo</h1>
+            <p class="subtitle">Select a mode and tune the settings for each simulation.</p>
+        </header>
 
-        <!-- Button to trigger rendering -->
-        <button id="render-button">Render with WebGPU</button>
+        <div id="menu" class="panel">
+            <div class="tabs" role="tablist">
+                <button class="tab active" data-simulation="Advection equation">Advection</button>
+                <button class="tab" data-simulation="Game of Life">Game of Life</button>
+                <button class="tab" data-simulation="Simulation Option 3">Option 3</button>
+            </div>
+
+            <div id="config-panel">
+                <div class="config active" id="config-advection">
+                    <div class="field">
+                        <label for="advection-timestep">Timestep</label>
+                        <input type="number" id="advection-timestep" value="0.0001" step="0.0001" min="0">
+                    </div>
+                    <div class="field">
+                        <label for="diffusion">Diffusion</label>
+                        <input type="number" id="diffusion" value="0.0002" step="0.0001" min="0">
+                    </div>
+                    <div class="field-inline">
+                        <div class="field">
+                            <label for="velocity-x">Velocity X</label>
+                            <input type="number" id="velocity-x" value="0.2" step="0.05">
+                        </div>
+                        <div class="field">
+                            <label for="velocity-y">Velocity Y</label>
+                            <input type="number" id="velocity-y" value="0.05" step="0.05">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="config" id="config-gol">
+                    <div class="field">
+                        <label for="gol-timestep">Timestep</label>
+                        <input type="number" id="gol-timestep" value="0.05" step="0.01" min="0">
+                    </div>
+                    <div class="field">
+                        <label for="gol-density">Initial density</label>
+                        <input type="number" id="gol-density" value="0.5" step="0.05" min="0" max="1">
+                    </div>
+                </div>
+
+                <div class="config" id="config-option3">
+                    <div class="field">
+                        <label for="option3-timestep">Timestep</label>
+                        <input type="number" id="option3-timestep" value="0.01" step="0.01" min="0">
+                    </div>
+                    <div class="field note">
+                        <p>Option 3 is a placeholder mode. Customize this panel for your next simulation.</p>
+                    </div>
+                </div>
+            </div>
+
+            <button id="render-button">Start simulation</button>
+            <div id="status" class="status info">Choose a simulation and press Start.</div>
+        </div>
+
+        <div id="canvas-wrapper">
+            <canvas id="webgpu-canvas" width="800" height="800"></canvas>
+        </div>
     </div>
-    <!-- Canvas for WebGPU rendering -->
-    <canvas id="webgpu-canvas" width="800" height="800"></canvas>
 </body>
 </html>

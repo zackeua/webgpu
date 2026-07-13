@@ -7,55 +7,180 @@
 }
 body, html {
     width: 100%;
-    height: 100%;
-    font-family: Arial, sans-serif;
-    background-color: #121212;
-    color: #ffffff;
+    min-height: 100vh;
+    padding: 52px 16px 24px;
+    font-family: Inter, Arial, sans-serif;
+    background-color: #101217;
+    color: #f4f4f8;
+    overflow-x: hidden;
 }
+
 .container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    padding: 20px;
+    display: grid;
+    grid-template-columns: minmax(320px, 360px) 1fr;
+    gap: 24px;
+    align-items: start;
+    padding: 0 32px 24px;
+    max-width: 1280px;
+    margin: 0 auto;
 }
+
+header {
+    grid-column: 1 / -1;
+    margin-bottom: 12px;
+}
+
 h1 {
-    margin-bottom: 20px;
-    font-size: 2.5em;
+    font-size: clamp(2rem, 3vw, 3rem);
+    margin-bottom: 8px;
 }
-canvas {
-    border: 2px solid #ffffff;
-    border-radius: 8px;
-    background-color: #1e1e1e;
+
+.subtitle {
+    color: #a8aabf;
+    font-size: 1rem;
 }
-button {
-    margin-top: 20px;
-    padding: 10px 20px;
-    font-size: 1em;
-    color: #121212;
-    background-color: #ffffff;
-    border: none;
-    border-radius: 5px;
+
+.panel {
+    background: #171823;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 18px;
+    padding: 22px;
+    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+}
+
+.tabs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 18px;
+}
+
+.tab {
+    appearance: none;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    color: #f4f4f8;
+    padding: 12px 14px;
+    border-radius: 12px;
     cursor: pointer;
-    transition: background-color 0.3s ease;
+    transition: background 0.25s ease, border-color 0.25s ease;
+    font-size: 0.95rem;
 }
-button:hover {
-    background-color: #e0e0e0;
+
+.tab.active,
+.tab:hover {
+    background: #2a2d3e;
+    border-color: rgba(255, 255, 255, 0.18);
 }
-button:active {
-    background-color: #c0c0c0;
+
+#config-panel {
+    display: grid;
 }
+
+.config {
+    display: none;
+    gap: 14px;
+}
+
+.config.active {
+    display: grid;
+}
+
+.field,
+.field-inline {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.field-inline {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+label {
+    font-size: 0.95rem;
+    color: #c9cbd9;
+}
+
+input[type="number"] {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: #11131a;
+    color: #f4f4f8;
+    font-size: 0.95rem;
+}
+
+input[type="number"]:focus {
+    outline: none;
+    border-color: #6673ff;
+    box-shadow: 0 0 0 3px rgba(102, 115, 255, 0.14);
+}
+
+button#render-button {
+    width: 100%;
+    padding: 14px 16px;
+    background: #6673ff;
+    color: #ffffff;
+    border: none;
+    border-radius: 14px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.15s ease, background 0.2s ease;
+}
+
+button#render-button:hover {
+    background: #5164f3;
+    transform: translateY(-1px);
+}
+
+button#render-button:active {
+    transform: translateY(0);
+}
+
 .status {
-    margin-top: 15px;
-    font-size: 1.2em;
+    margin-top: 16px;
+    font-size: 0.95rem;
+    color: #9aa1c4;
 }
+
 .status.success {
-    color: #4caf50;
+    color: #7bd88f;
 }
+
 .status.error {
-    color: #f44336;
+    color: #ff7e7e;
 }
-.status.info {
-    color: #2196f3;
+
+#canvas-wrapper {
+    display: grid;
+    place-items: center;
+    padding: 10px;
+    border-radius: 24px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+canvas {
+    width: 100%;
+    max-width: 800px;
+    border-radius: 16px;
+    background-color: #0f1117;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
+.note p {
+    font-size: 0.92rem;
+    line-height: 1.55;
+    color: #b2b7d0;
+    margin: 0;
+}
+
+@media (max-width: 900px) {
+    .container {
+        grid-template-columns: 1fr;
+    }
 }
