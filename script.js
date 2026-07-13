@@ -16,7 +16,10 @@ let gpu = {
 };
 
 let running = false;
-let timestep = 0.01;
+let timestep = 0.0001;
+let diffusion = 0.0002;
+let velocityX = 0.2;
+let velocityY = 0.05;
 
 /* ===================== INIT ===================== */
 
@@ -69,26 +72,53 @@ async function initWebGPU() {
             }
 
             let index = y * ${gpu.gridSize}u + x;
-
-            // Proper advection equation would go here
             let center = input[index];
-            let x_gradient = input[index + max(x - 1u, 0u)] - input[index + min(x + 1u, ${gpu.gridSize}u - 1u)];
-            let y_gradient = input[index + max(y - 1u, 0u) * ${gpu.gridSize}u] - input[index + min(y + 1u, ${gpu.gridSize}u - 1u) * ${gpu.gridSize}u];
 
-            let gradient = (x_gradient + y_gradient) * 0.5;
+            var left = center;
+            if (x > 0u) {
+                left = input[index - 1u];
+            }
 
-            let x_laplacian = input[y * ${gpu.gridSize}u + max(x - 1u, 0u)] + input[y * ${gpu.gridSize}u + min(x + 1u, ${gpu.gridSize}u - 1u)] - 2.0 * center;
-            let y_laplacian = input[max(y - 1u, 0u) * ${gpu.gridSize}u + x] + input[min(y + 1u, ${gpu.gridSize}u - 1u) * ${gpu.gridSize}u + x] - 2.0 * center;
-            let xy_laplacian = input[max(y - 1u, 0u) * ${gpu.gridSize}u + max(x - 1u, 0u)] + input[min(y + 1u, ${gpu.gridSize}u - 1u) * ${gpu.gridSize}u + min(x + 1u, ${gpu.gridSize}u - 1u)]
-                                - input[max(y - 1u, 0u) * ${gpu.gridSize}u + min(x + 1u, ${gpu.gridSize}u - 1u)]
-                                - input[min(y + 1u, ${gpu.gridSize}u - 1u) * ${gpu.gridSize}u + max(x - 1u, 0u)];
-            let yx_laplacian = input[min(y + 1u, ${gpu.gridSize}u - 1u) * ${gpu.gridSize}u + max(x - 1u, 0u)] + input[max(y - 1u, 0u) * ${gpu.gridSize}u + min(x + 1u, ${gpu.gridSize}u - 1u)]
-                                - input[max(y - 1u, 0u) * ${gpu.gridSize}u + max(x - 1u, 0u)]
-                                - input[min(y + 1u, ${gpu.gridSize}u - 1u) * ${gpu.gridSize}u + min(x + 1u, ${gpu.gridSize}u - 1u)];
+            var right = center;
+            if (x < ${gpu.gridSize}u - 1u) {
+                right = input[index + 1u];
+            }
 
-            let laplacian = 0.25 * (x_laplacian + y_laplacian + xy_laplacian + yx_laplacian);
+            var up = center;
+            if (y > 0u) {
+                up = input[index - ${gpu.gridSize}u];
+            }
 
-            output[index] = center - gradient * ${timestep} + laplacian * ${timestep}*${timestep};
+            var down = center;
+            if (y < ${gpu.gridSize}u - 1u) {
+                down = input[index + ${gpu.gridSize}u];
+            }
+
+            let dx = 1.0 / f32(${gpu.gridSize}u);
+            let invDx2 = 1.0 / (dx * dx);
+
+            let vx = ${velocityX};
+            let vy = ${velocityY};
+            let nu = ${diffusion};
+            let dt = ${timestep};
+
+            var u_x = (center - left) * dx;
+            if (vx < 0.0) {
+                u_x = (right - center) * dx;
+            }
+
+            var u_y = (center - up) * dx;
+            if (vy < 0.0) {
+                u_y = (down - center) * dx;
+            }
+
+            let u_xx = (right - 2.0 * center + left) * invDx2;
+            let u_yy = (down - 2.0 * center + up) * invDx2;
+
+            let advective = -(vx * u_x + vy * u_y);
+            let diffusive = nu * (u_xx + u_yy);
+
+            output[index] = clamp(center + (advective + diffusive) * dt, 0.0, 1.0);
         }
     `;
 
