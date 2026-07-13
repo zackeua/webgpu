@@ -6,7 +6,7 @@ let gpu = {
     pipeline: null,
     bindGroups: [],
     buffers: [],
-    gridSize: 1600,
+    gridSize: 2**11, // 2048
     workgroupSize: 16,
     currentBuffer: 0,
 
@@ -55,7 +55,7 @@ async function initWebGPU() {
 
     /* ---------- COMPUTE PIPELINE ---------- */
 
-    const computeShader = `
+    const advectionComputeShader = `
         @group(0) @binding(0) var<storage, read> input : array<f32>;
         @group(0) @binding(1) var<storage, read_write> output : array<f32>;
 
@@ -91,6 +91,46 @@ async function initWebGPU() {
             output[index] = center - gradient * ${timestep} + laplacian * ${timestep}*${timestep};
         }
     `;
+
+    const gameComputeShader = `
+        @group(0) @binding(0) var<storage, read> input : array<f32>;
+        @group(0) @binding(1) var<storage, read_write> output : array<f32>;
+        
+        @compute @workgroup_size(${gpu.workgroupSize}, ${gpu.workgroupSize})
+        fn main(@builtin(global_invocation_id) id : vec3<u32>) {
+            let x = id.x;
+            let y = id.y;
+            if (x >= ${gpu.gridSize}u || y >= ${gpu.gridSize}u) {
+                return;
+            }
+            let index = y * ${gpu.gridSize}u + x;
+
+            // Placeholder for game of life logic
+            var neighbors = 0u;
+            neighbors += u32(input[y * ${gpu.gridSize}u + max(x - 1u, 0u)]);
+            neighbors += u32(input[y * ${gpu.gridSize}u + min(x + 1u, ${gpu.gridSize}u - 1u)]);
+            neighbors += u32(input[max(y - 1u, 0u) * ${gpu.gridSize}u + x]);
+            neighbors += u32(input[min(y + 1u, ${gpu.gridSize}u - 1u) * ${gpu.gridSize}u + x]);
+            neighbors += u32(input[max(y - 1u, 0u) * ${gpu.gridSize}u + max(x - 1u, 0u)]);
+            neighbors += u32(input[max(y - 1u, 0u) * ${gpu.gridSize}u + min(x + 1u, ${gpu.gridSize}u - 1u)]);
+            neighbors += u32(input[min(y + 1u, ${gpu.gridSize}u - 1u) * ${gpu.gridSize}u + max(x - 1u, 0u)]);
+            neighbors += u32(input[min(y + 1u, ${gpu.gridSize}u - 1u) * ${gpu.gridSize}u + min(x + 1u, ${gpu.gridSize}u - 1u)]);
+
+            if (u32(input[index]) > 0u) {
+                if (neighbors < 2u || neighbors > 3u) {
+                    output[index] = 0.0; // Cell dies
+                } else {
+                    output[index] = 1.0; // Cell lives
+                }
+            }  else {
+                output[index] = input[index];
+            }
+        }
+    `;
+
+    const computeShader = gpu.simulation === "Advection equation" ? advectionComputeShader :
+                          gpu.simulation === "Game of Life" ? gameComputeShader :
+                          advectionComputeShader; // default
 
     gpu.pipeline = gpu.device.createComputePipeline({
         layout: "auto",
@@ -193,29 +233,57 @@ function initializeField() {
     const size = gpu.gridSize;
     const data = new Float32Array(size * size);
 
-    const cx = size * 0.5;
-    const cy = size * 0.5;
-    const sigma = size * 0.1;
+    if (gpu.simulation === "Advection equation") {
+        console.log("Initializing field for Advection equation.");
+        
+        const cx = size * 0.5;
+        const cy = size * 0.5;
+        const sigma = size * 0.1;
 
-    for (let y = 0; y < size; y++) {
-        for (let x = 0; x < size; x++) {
-            const dx = x - cx;
-            const dy = y - cy;
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                const dx = x - cx;
+                const dy = y - cy;
 
-            // Gaussian blob
-            const gaussian = Math.exp(-(dx * dx + dy * dy) / (2 * sigma * sigma));
+                // Gaussian blob
+                const gaussian = Math.exp(-(dx * dx + dy * dy) / (2 * sigma * sigma));
 
-            // Sinusoidal perturbation
-            const wave =
-                0.25 * Math.sin(x * 0.1) * Math.cos(y * 0.1);
+                // Sinusoidal perturbation
+                const wave = 0.25 * Math.sin(x * 0.1) * Math.cos(y * 0.1);
 
-            data[y * size + x] = gaussian + wave;
+                data[y * size + x] = gaussian + wave;
+            }
         }
+    } else if (gpu.simulation === "Game of Life") {
+        console.log("Initializing field for Game of Life.");
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                // Random noise initialization
+                data[y * size + x] = Math.random() > 0.5 ? 1.0 : 0.0;
+            }
+        }
+    } else {
+        console.log("Initializing field for default simulation.");
     }
 
     // Upload to BOTH ping-pong buffers
     gpu.device.queue.writeBuffer(gpu.buffers[0], 0, data);
     gpu.device.queue.writeBuffer(gpu.buffers[1], 0, data);
+}
+
+function setSimulation(option) {
+    console.log("Selected simulation:", option);
+
+    if (option === "Advection equation") {
+        gpu.simulation = "Advection equation";
+    } else if (option === "Game of Life") {
+        gpu.simulation = "Game of Life";
+    } else if (option === "Simulation Option 3") {
+        gpu.simulation = "Simulation Option 3";
+    } else {
+        console.warn("Unknown simulation option:", option, "defaulting to Advection equation.");
+        gpu.simulation = "Advection equation";
+    }
 }
 
 
@@ -277,6 +345,10 @@ function simLoop() {
 
 window.addEventListener("DOMContentLoaded", () => {
     document.getElementById("render-button").addEventListener("click", async () => {
+
+        const simulation = document.getElementById("simulation-select").value;
+        setSimulation(simulation);
+
         if (!gpu.device) {
             await initWebGPU();
             initializeField();
